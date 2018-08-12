@@ -259,7 +259,8 @@ func (c *Client) Update(namespace string, originalReader, targetReader io.Reader
 		}
 
 		helper := resource.NewHelper(info.Client, info.Mapping)
-		if _, err := helper.Get(info.Namespace, info.Name, info.Export); err != nil {
+		existingObject, err := helper.Get(info.Namespace, info.Name, info.Export)
+		if err != nil {
 			if !errors.IsNotFound(err) {
 				return fmt.Errorf("Could not get information about the resource: %s", err)
 			}
@@ -275,12 +276,14 @@ func (c *Client) Update(namespace string, originalReader, targetReader io.Reader
 		}
 
 		originalInfo := original.Get(info)
-		if originalInfo == nil {
+		if originalInfo != nil {
+			existingObject = originalInfo.Object
+		} else {
 			kind := info.Mapping.GroupVersionKind.Kind
-			return fmt.Errorf("no %s with the name %q found", kind, info.Name)
+			c.Log("No %s with the name %q found in old manifest, using k8s version as a base\n", kind, info.Name)
 		}
 
-		if err := updateResource(c, info, originalInfo.Object, force, recreate); err != nil {
+		if err := updateResource(c, info, existingObject, force, recreate); err != nil {
 			c.Log("error updating the resource %q:\n\t %v", info.Name, err)
 			updateErrors = append(updateErrors, err.Error())
 		}
